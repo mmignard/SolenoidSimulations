@@ -7,7 +7,7 @@ Created on Thu May 11 20:39:17 2023
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy as sp
-import femm
+import femm #pip install pyfemm
 
 femm.openfemm()
 draw=False
@@ -36,7 +36,28 @@ def addblocklabel(x,y,matl,a1,a2,a3,a4,a5,a6):
     if draw:
         plt.plot(x,y,'go')
         
-def makeSolenoid(r,h,cPts,wPts,draw=False):
+def makeSolenoid(cPts,wPts,draw=False):
+    ''' 
+    Create a solenoid using numpy arrays to define the points. Using cylindrically
+    symmetric design, so only need to define half the solenoid (in the radial direction)
+    With an antiperiodic boundary condition at the bottom in the axial direction the 
+    the simulations would be twice as fast, but I never got around to doing that.
+    
+    cPts is the core boundary. For a cylindrical core, only need two points with 
+        [[r,-h/2], [r,h/2]]
+    because 0,-h/2 and 0,h/2 are assumed to be part of the core.
+    
+    wPts defines the winding boundary. Again only two points are needed with
+        [[r+t,-h/2+bel], [r+t,h/2-bel]] 
+    where 't' is the radial thickness of the winding, and 
+    where 'bel' is the length of core at the end not covered by winding
+    The top and bottom of the winding are assumed to be flat, and the winding
+    extends to the left all the way to the core.
+    '''
+    
+    #calculate total height (length) of the core
+    h = np.max(cPts[:,1]) - np.min(cPts[:,1])
+    
     #draw core
     addnode(0,-h/2,draw)        
     addnode(0,h/2,draw)
@@ -83,7 +104,24 @@ def Baxial(R,L,M,mu0 = 1.257e-6):
 ErrFuncAxial=lambda M,p,fit: Baxial(p,h/100,M)-fit    
 ErrFuncRadial=lambda M,p,fit: Bradial(p,h/100,M)-fit    
         
-def analyzeSolenoid(r,h,cPts,wPts,coreMat,airMesh,wCurr,pos):
+def analyzeSolenoid(cPts,wPts,coreMat,airMesh,wCurr,pos):
+    '''
+    Create the physical design of a solenoid, then calculate the magnetic flux
+    in the axial and radial positions defined by numpy array 'pos'
+    
+    for definitions of cPts & wPts see function makeSolenoid() above
+    coreMat is a magnetic material from the FEMM library
+    airMesh controls the coarseness of the mesh, see documentation on femm.mi_setblockprop()
+    wCurr is the current in the winding
+    pos is a numpy array that defines where to measure the magnetic flux. This is confusing.
+        I should have defined pos as a 2-d array, or as posR and posA for radial and axial directions.
+        Instead, for the axial flux calculation, pos is assumed to be on a vertical line at radius=0.
+        For the radial flux calculation, pos is assumed to be on a horizontal line at z=0.
+        
+    Usually I call analyzeSolenoid() many times to collect data with different currents.
+    Could have made this more efficient by calling makeSolenoid() one time, and changing the
+    winding current on that one design.
+    '''
     femm.newdocument(0) #0 is magnetics problem
     femm.mi_probdef(0,'centimeters','axi',1e-8,0.5,30,0)
     #femm.mi_seteditmode('blocks') #don't seem to need this
@@ -92,7 +130,7 @@ def analyzeSolenoid(r,h,cPts,wPts,coreMat,airMesh,wCurr,pos):
     femm.mi_getmaterial(coreMat);
     femm.mi_getmaterial('26 AWG'); 
     femm.mi_addcircprop('winding',wCurr,1) #winding is 1000A-turns, and it is in series
-    makeSolenoid(r,h,cPts,wPts,False)  
+    makeSolenoid(cPts,wPts,False)  
     ctr = int(cPts.shape[0]/2)
     addblocklabel(cPts[ctr,0]/2,0,coreMat,1,0,0,0,0,0)    
     addblocklabel((cPts[ctr,0]+wPts[ctr,0])/2,-2,'26 AWG',1,0,'winding',1,0,0)  
@@ -116,6 +154,8 @@ def analyzeSolenoid(r,h,cPts,wPts,coreMat,airMesh,wCurr,pos):
     br=np.zeros(pos.size)
     for i in np.arange(0,pos.size):
         br[i]  = femm.mo_getb(pos[i],0)[1]
+        
+    femm.mi_close()
     return -br,bz
     
 ##########################################################################
@@ -137,7 +177,7 @@ pos = np.linspace(0,h/2,50)
 curr = np.array([3000,2000,1000,750,500])
 bz = np.zeros([pos.size,curr.size])
 for c in np.arange(0,curr.size):
-    br,bz[:,c] = analyzeSolenoid(r,h,cPts,wPts,'Mu Metal',0,curr[c],pos)
+    br,bz[:,c] = analyzeSolenoid(cPts,wPts,'Mu Metal',0,curr[c],pos)
 
 plt.figure(figsize=(5,3.5),dpi=300)
 plt.title('B axial in center of mu metal core')
@@ -174,7 +214,7 @@ curr = np.array([8000,5000,3000,2000,1000])
 #curr = np.array([8000,5000,4000,3000,2000,1000,500,200])
 bz = np.zeros([pos.size,curr.size])
 for c in np.arange(0,curr.size):
-    br,bz[:,c] = analyzeSolenoid(r,h,cPts,wPts,'Hiperco-50',0,curr[c],pos)
+    br,bz[:,c] = analyzeSolenoid(cPts,wPts,'Hiperco-50',0,curr[c],pos)
 plt.figure(figsize=(5,3.5),dpi=300)
 plt.title('B axial in center of Hiperco-50 core')
 for c in np.arange(0,curr.size):
@@ -197,7 +237,7 @@ plt.show()
 
 #estimate magnetic moment
 pos=np.linspace(50,100,101)
-br,bz = analyzeSolenoid(r,h,cPts,wPts,'Mu Metal',0,1000,pos)
+br,bz = analyzeSolenoid(cPts,wPts,'Mu Metal',0,1000,pos)
 
 #In the axial direction, the simulation doesn't give accurate values until a little further
 #from the end of the solenoid core, so begin the fitting later. To get the simulation to
@@ -236,11 +276,11 @@ MeRadialMu = np.zeros(curr.size)
 MeAxialVP = np.zeros(curr.size)
 MeRadialVP = np.zeros(curr.size)
 for c in np.arange(0,curr.size):
-    br[:,c],bz[:,c] = analyzeSolenoid(r,h,cPts,wPts,'Mu Metal',0,curr[c],pos)
+    br[:,c],bz[:,c] = analyzeSolenoid(cPts,wPts,'Mu Metal',0,curr[c],pos)
     beg = 10; MeAxialMu[c],success = sp.optimize.leastsq(ErrFuncAxial,10,args=(pos[beg:-1]/100,bz[beg:-1,c]))
     beg = 0; MeRadialMu[c],success = sp.optimize.leastsq(ErrFuncRadial,10,args=(pos[beg:-1]/100,br[beg:-1,c]))
 
-    br[:,c],bz[:,c] = analyzeSolenoid(r,h,cPts,wPts,'Hiperco-50',0,curr[c],pos)
+    br[:,c],bz[:,c] = analyzeSolenoid(cPts,wPts,'Hiperco-50',0,curr[c],pos)
     beg = 10; MeAxialVP[c],success = sp.optimize.leastsq(ErrFuncAxial,10,args=(pos[beg:-1]/100,bz[beg:-1,c]))
     beg = 0; MeRadialVP[c],success = sp.optimize.leastsq(ErrFuncRadial,10,args=(pos[beg:-1]/100,br[beg:-1,c]))
 

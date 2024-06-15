@@ -24,7 +24,9 @@ $$B_{axial} = {&mu;_0 \over {4 &pi;}}M \left[ {{{R \over L} - {1 \over 2}}\over 
 $&mu;_0$ is the permittivity of space, R is the distance from center of magnetic core, L is the length of the winding, and M is the magnetic moment.
 
 A comparison of the simulated results for these axial and radial fluxes with the equations is shown below. Finer meshes are more accurate, but the simulations take longer.
+
 ![](./media/MuMetalFlux.svg)
 
-For a magnetorquer the magnetic moment 'M' is an important parameter. It can be extracted from the simulation data by fitting the equations to minimize the least square error of the magnetic moment
+For a magnetorquer the magnetic moment 'M' is an important parameter. It can be extracted from the simulation data by fitting the equations to minimize the least square error of the magnetic moment.
+
 ![](./media/MomentComparison.svg)
